@@ -1,0 +1,6 @@
+{
+  "name": "Git Push Folder",
+  "description": "Automate committing a local folder to a GitHub repository.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
