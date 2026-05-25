@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -105,9 +106,11 @@ fun SetupScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "🚀",
-                        fontSize = 48.sp,
+                    Icon(
+                        imageVector = Icons.Rounded.CloudUpload,
+                        contentDescription = "GitPush Logo Icon",
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
                     )
                 }
 

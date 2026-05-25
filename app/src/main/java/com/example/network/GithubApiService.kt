@@ -94,6 +94,11 @@ data class UpdateRefRequest(
     val force: Boolean = false
 )
 
+data class CreateRefRequest(
+    val ref: String,
+    val sha: String
+)
+
 data class BranchResponseItem(
     val name: String
 )
@@ -140,6 +145,13 @@ interface GithubApiService {
         @Path("repo") repo: String,
         @Path("branch") branch: String,
         @Body body: UpdateRefRequest
+    ): RefResponse
+
+    @POST("repos/{owner}/{repo}/git/refs")
+    suspend fun createRef(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Body body: CreateRefRequest
     ): RefResponse
 
     @GET("repos/{owner}/{repo}/branches")

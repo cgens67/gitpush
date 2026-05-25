@@ -14,6 +14,7 @@ import com.example.network.GithubClient
 import com.example.network.TreeEntry
 import com.example.network.TreeRequest
 import com.example.network.UpdateRefRequest
+import com.example.network.CreateRefRequest
 import com.example.utils.FolderScanner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -247,9 +248,15 @@ class GitSyncViewModel(private val repository: GithubSyncRepository) : ViewModel
                         body = UpdateRefRequest(sha = commitResp.sha, force = true)
                     )
                 } else {
-                    // Create branch fallback is not required since the standard requires to existing.
-                    // But if it was null, let's inform the user that it needs to exist or we notify them.
-                    throw IllegalStateException("GitHub branch '${config.selectedBranch}' needs to be initialized first on GitHub.")
+                    // Fallback: This is a brand-new or empty repository. Dynamically create the branch reference!
+                    service.createRef(
+                        owner = config.owner,
+                        repo = config.repoName,
+                        body = CreateRefRequest(
+                            ref = "refs/heads/${config.selectedBranch}",
+                            sha = commitResp.sha
+                        )
+                    )
                 }
 
                 // Success! Append to log and update UI

@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -246,16 +248,18 @@ fun CoachMarksOverlay(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Energetic Emoji and Bubble
+                // Energetic Icon and Bubble (Replacing emojis with Material Rounded icons as requested)
                 Box(
                     modifier = Modifier
                         .size(90.dp)
                         .background(MaterialTheme.colorScheme.primary, shape = CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (step == 1) "📂" else "🚀",
-                        fontSize = 44.sp
+                    Icon(
+                        imageVector = if (step == 1) Icons.Rounded.FolderOpen else Icons.Rounded.CloudUpload,
+                        contentDescription = "Step Icon",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(44.dp)
                     )
                 }
 
