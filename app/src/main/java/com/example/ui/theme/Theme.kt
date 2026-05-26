@@ -23,7 +23,14 @@ private val DarkColorScheme = darkColorScheme(
   onPrimary = OnPrimaryDark,
   onSecondary = OnSecondaryDark,
   onBackground = OnBackgroundDark,
-  onSurface = OnSurfaceDark
+  onSurface = OnSurfaceDark,
+  primaryContainer = Color(0xFF004481),
+  onPrimaryContainer = Color(0xFFD6E3FF),
+  secondaryContainer = Color(0xFF3B475B),
+  onSecondaryContainer = Color(0xFFDAE2F9),
+  surfaceVariant = Color(0xFF2C3241),
+  onSurfaceVariant = Color(0xFFC3C6CF),
+  outline = Color(0xFF8D9199)
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -36,13 +43,13 @@ private val LightColorScheme = lightColorScheme(
   onSecondary = OnSecondaryLight,
   onBackground = OnBackgroundLight,
   onSurface = OnSurfaceLight,
-  primaryContainer = Color(0xFFEADDFF),
-  onPrimaryContainer = Color(0xFF21005D),
-  secondaryContainer = Color(0xFFE8DEF8),
-  onSecondaryContainer = Color(0xFF49454F),
-  surfaceVariant = Color(0xFFE7E0EC),
-  onSurfaceVariant = Color(0xFF49454F),
-  outline = Color(0xFF79747E)
+  primaryContainer = Color(0xFFD6E3FF),
+  onPrimaryContainer = Color(0xFF001B4B),
+  secondaryContainer = Color(0xFFDAE2F9),
+  onSecondaryContainer = Color(0xFF101C31),
+  surfaceVariant = Color(0xFFDFE2EB),
+  onSurfaceVariant = Color(0xFF43474F),
+  outline = Color(0xFF73777F)
 )
 
 // Material 3 Expressive guidelines favor playfulness, big curves, and dynamic feels

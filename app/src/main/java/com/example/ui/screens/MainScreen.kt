@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Brightness4
+import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.Cached
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Commit
@@ -186,21 +188,45 @@ fun MainScreen(
                             }
                         }
 
-                        // Logout / Disconnect Button (Circular styled switcher border)
-                        IconButton(
-                            onClick = { viewModel.resetSetup() },
-                            modifier = Modifier
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .testTag("disconnect_settings_btn")
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Logout,
-                                contentDescription = "Disconnect Account",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+                            // Theme Switcher Button
+                            IconButton(
+                                onClick = { viewModel.toggleTheme() },
+                                modifier = Modifier
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .testTag("theme_toggle_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (isDarkTheme) Icons.Default.Brightness7 else Icons.Default.Brightness4,
+                                    contentDescription = "Toggle Theme",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // Logout / Disconnect Button (Circular styled switcher border)
+                            IconButton(
+                                onClick = { viewModel.resetSetup() },
+                                modifier = Modifier
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .testTag("disconnect_settings_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Logout,
+                                    contentDescription = "Disconnect Account",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }

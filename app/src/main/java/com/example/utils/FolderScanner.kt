@@ -18,6 +18,15 @@ data class ScannedFile(
 
 object FolderScanner {
 
+    private val ignoredDirs = setOf(
+        ".git", ".gradle", ".idea", "build", "node_modules", 
+        "bin", "obj", "venv", ".venv", ".expo", "out"
+    )
+    private val ignoredFiles = setOf(
+        ".ds_store", "thumbs.db", "package-lock.json", 
+        "yarn.lock", "pnpm-lock.yaml"
+    )
+
     suspend fun listAllFiles(context: Context, treeUri: Uri): List<ScannedFile> = withContext(Dispatchers.IO) {
         val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext emptyList()
         val results = mutableListOf<ScannedFile>()
@@ -35,10 +44,17 @@ object FolderScanner {
         files.forEach { file ->
             val fileName = file.name ?: return@forEach
             val relativePath = if (currentPath.isEmpty()) fileName else "$currentPath/$fileName"
+            val lowercaseName = fileName.lowercase()
 
             if (file.isDirectory) {
+                if (lowercaseName in ignoredDirs) {
+                    return@forEach
+                }
                 scanRecursively(context, file, relativePath, results)
             } else if (file.isFile) {
+                if (lowercaseName in ignoredFiles) {
+                    return@forEach
+                }
                 try {
                     val contentResolver = context.contentResolver
                     val base64 = withContext(Dispatchers.IO) {

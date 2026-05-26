@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Brightness4
+import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.rounded.CloudUpload
@@ -83,6 +85,26 @@ fun SetupScreen(
                 ),
             contentAlignment = Alignment.Center
         ) {
+            val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+            // Header Theme Switcher
+            androidx.compose.material3.IconButton(
+                onClick = { viewModel.toggleTheme() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .testTag("setup_theme_toggle_btn")
+            ) {
+                Icon(
+                    imageVector = if (isDarkTheme) Icons.Default.Brightness7 else Icons.Default.Brightness4,
+                    contentDescription = "Toggle Theme",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()

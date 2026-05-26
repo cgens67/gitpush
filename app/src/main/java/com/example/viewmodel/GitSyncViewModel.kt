@@ -63,6 +63,13 @@ class GitSyncViewModel(private val repository: GithubSyncRepository) : ViewModel
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Setup)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
+    private val _isDarkTheme = MutableStateFlow(true) // Default to dark mode as previous default, allow toggle
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
+    fun toggleTheme() {
+        _isDarkTheme.value = !_isDarkTheme.value
+    }
+
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
 

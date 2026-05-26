@@ -33,7 +33,8 @@ class MainActivity : ComponentActivity() {
         val viewModel = ViewModelProvider(this, factory)[GitSyncViewModel::class.java]
 
         setContent {
-            MyApplicationTheme {
+            val isDark = viewModel.isDarkTheme.collectAsState()
+            MyApplicationTheme(darkTheme = isDark.value) {
                 val currentScreen by viewModel.currentScreen.collectAsState()
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->

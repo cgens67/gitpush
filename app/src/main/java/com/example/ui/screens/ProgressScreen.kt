@@ -28,6 +28,13 @@ import androidx.compose.material.icons.filled.SecurityUpdateGood
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -38,13 +45,169 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.viewmodel.GitSyncViewModel
 import com.example.viewmodel.SyncState
+
+object LoadingIndicatorDefaults {
+    val defaultShapes: List<Int> = listOf(3, 4, 5, 6, 8)
+}
+
+object ProgressIndicatorDefaults {
+    val wavyStroke = Stroke(width = 8f)
+    val wavyTrackStroke = Stroke(width = 6f)
+    val amplitude = 8.dp
+    val numWaves = 3.5f
+    val wavelength = 36.dp
+    val waveSpeed = 12.dp
+}
+
+@Composable
+fun LoadingIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    polygons: List<Int> = LoadingIndicatorDefaults.defaultShapes
+) {
+    val transition = rememberInfiniteTransition(label = "loading_morph")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+    val morphProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = polygons.size.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "morph"
+    )
+
+    Canvas(
+        modifier = modifier
+            .size(80.dp)
+            .padding(8.dp)
+    ) {
+        val width = size.width
+        val height = size.height
+        val radius = size.minDimension / 2.3f
+        val center = androidx.compose.ui.geometry.Offset(width / 2f, height / 2f)
+
+        val index = morphProgress.toInt().coerceIn(0, polygons.size - 1)
+        val nextIndex = (index + 1) % polygons.size
+        val fraction = morphProgress - index.toFloat()
+
+        val sides = polygons.getOrNull(index) ?: 4
+        val nextSides = polygons.getOrNull(nextIndex) ?: 5
+        val interpolatedSides = sides + (nextSides - sides) * fraction
+
+        val path = androidx.compose.ui.graphics.Path()
+        val steps = 180
+        for (i in 0..steps) {
+            val angleDeg = (360f * i / steps)
+            val angleRad = Math.toRadians(angleDeg.toDouble())
+            val section = (2 * Math.PI) / interpolatedSides
+            val remainder = angleRad % section
+            val rFactor = Math.cos(section / 2.0) / Math.cos(remainder - section / 2.0)
+            
+            val scale = (rFactor * (1 - 0.15f * fraction) + 0.15f * fraction)
+            val currentRadius = radius * scale.toFloat()
+
+            val x = (center.x + currentRadius * Math.cos(angleRad)).toFloat()
+            val y = (center.y + currentRadius * Math.sin(angleRad)).toFloat()
+
+            if (i == 0) {
+                path.moveTo(x, y)
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+        path.close()
+
+        rotate(rotation, center) {
+            drawPath(
+                path = path,
+                color = color,
+                style = Stroke(
+                    width = 10f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(24f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun LinearWavyProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    stroke: Stroke = ProgressIndicatorDefaults.wavyStroke,
+    trackStroke: Stroke = ProgressIndicatorDefaults.wavyTrackStroke,
+    amplitude: Dp = ProgressIndicatorDefaults.amplitude,
+    numWaves: Float = ProgressIndicatorDefaults.numWaves,
+    wavelength: Dp = ProgressIndicatorDefaults.wavelength,
+    waveSpeed: Dp = ProgressIndicatorDefaults.waveSpeed
+) {
+    val transition = rememberInfiniteTransition(label = "wave_anim")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2f * Math.PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "phase"
+    )
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(24.dp)
+    ) {
+        val width = size.width
+        val midY = size.height / 2f
+        val ampPx = amplitude.toPx()
+        val wavelengthPx = wavelength.toPx().coerceAtLeast(10f)
+
+        drawLine(
+            color = trackColor,
+            start = androidx.compose.ui.geometry.Offset(0f, midY),
+            end = androidx.compose.ui.geometry.Offset(width, midY),
+            strokeWidth = trackStroke.width,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+
+        val p = androidx.compose.ui.graphics.Path()
+        p.moveTo(0f, midY + (ampPx * Math.sin(-phase.toDouble())).toFloat())
+
+        var x = 0f
+        while (x <= width) {
+            val angle = (x / wavelengthPx) * (2f * Math.PI) - phase
+            val y = midY + (ampPx * Math.sin(angle)).toFloat()
+            p.lineTo(x, y)
+            x += 2f
+        }
+
+        drawPath(
+            path = p,
+            color = color,
+            style = stroke
+        )
+    }
+}
 
 @Composable
 fun ProgressScreen(
@@ -155,20 +318,11 @@ fun ProgressScreen(
                 }
 
                 is SyncState.UploadingBlobs -> {
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .background(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(32.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(56.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    LoadingIndicator(
+                        modifier = Modifier.size(100.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        polygons = LoadingIndicatorDefaults.defaultShapes
+                    )
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -182,17 +336,19 @@ fun ProgressScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Playful Linear Progress Indicator
-                    val progressFraction = s.uploaded.toFloat() / s.total.toFloat()
-                    LinearProgressIndicator(
-                        progress = { progressFraction },
+                    // Elegant design with waving progression
+                    LinearWavyProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(12.dp)
                             .padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.outlineVariant,
-                        drawStopIndicator = {}
+                        stroke = ProgressIndicatorDefaults.wavyStroke,
+                        trackStroke = ProgressIndicatorDefaults.wavyTrackStroke,
+                        amplitude = ProgressIndicatorDefaults.amplitude,
+                        numWaves = ProgressIndicatorDefaults.numWaves,
+                        wavelength = ProgressIndicatorDefaults.wavelength,
+                        waveSpeed = ProgressIndicatorDefaults.waveSpeed
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
