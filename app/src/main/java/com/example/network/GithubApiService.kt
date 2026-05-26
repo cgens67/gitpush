@@ -154,6 +154,13 @@ interface GithubApiService {
         @Body body: TreeRequest
     ): TreeResponse
 
+    @GET("repos/{owner}/{repo}/git/trees/{tree_sha}?recursive=1")
+    suspend fun getTreeRecursive(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("tree_sha") treeSha: String
+    ): TreeResponse
+
     @POST("repos/{owner}/{repo}/git/commits")
     suspend fun createCommit(
         @Path("owner") owner: String,

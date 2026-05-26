@@ -24,6 +24,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.atomic.AtomicInteger
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 sealed class Screen {
     object Setup : Screen()
@@ -255,33 +262,92 @@ class GitSyncViewModel(private val repository: GithubSyncRepository) : ViewModel
                     null
                 }
 
-                // 3. Create blob on GitHub for each remaining scanned file
+                // Retrieve the existing remote tree recursively if available, in order to avoid uploading unchanged files
+                val existingTree = if (baseTreeSha != null) {
+                    try {
+                        service.getTreeRecursive(config.owner, config.repoName, baseTreeSha).tree ?: emptyList()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
+
+                val existingFileShas = existingTree.associate { it.path to it.sha }
+
+                // 3. Create blob on GitHub for each remaining scanned file in parallel
                 val total = files.size
-                val entries = mutableListOf<TreeEntry>()
                 val startIndex = if (didInitialUpload) 1 else 0
+                val activeFiles = if (startIndex < total) files.subList(startIndex, total) else emptyList()
 
-                if (startIndex < total) {
-                    for (index in startIndex until total) {
-                        val scannedFile = files[index]
-                        _syncState.value = SyncState.UploadingBlobs(
-                            total = total,
-                            uploaded = index + 1,
-                            currentFile = scannedFile.relativePath
-                        )
+                val semaphore = Semaphore(6) // Concurrency limit of 6 requests
+                val uploadedCount = AtomicInteger(startIndex)
 
-                        val blobReq = BlobRequest(content = scannedFile.base64Content)
-                        val blobResp = service.createBlob(config.owner, config.repoName, blobReq)
+                // Initialize progress indicator
+                _syncState.value = SyncState.UploadingBlobs(
+                    total = total,
+                    uploaded = startIndex,
+                    currentFile = if (activeFiles.isNotEmpty()) activeFiles.first().relativePath else ""
+                )
 
-                        entries.add(
-                            TreeEntry(
+                val deferredEntries = activeFiles.map { scannedFile ->
+                    async {
+                        val localSha = calculateGitBlobSha(scannedFile.base64Content)
+                        val existingSha = existingFileShas[scannedFile.relativePath]
+
+                        if (existingSha != null && localSha == existingSha) {
+                            // File matches what is on GitHub exactly. Re-use the existing SHA and skip network upload!
+                            val currentCount = uploadedCount.incrementAndGet()
+                            _syncState.value = SyncState.UploadingBlobs(
+                                total = total,
+                                uploaded = currentCount,
+                                currentFile = scannedFile.relativePath
+                            )
+                            return@async TreeEntry(
                                 path = scannedFile.relativePath,
                                 mode = "100644",
                                 type = "blob",
-                                sha = blobResp.sha
+                                sha = localSha
                             )
-                        )
-                    }
+                        }
 
+                        // Otherwise, acquire permit and upload to GitHub with up to 3 retries
+                        semaphore.withPermit {
+                            var lastError: Exception? = null
+                            for (attempt in 1..3) {
+                                try {
+                                    val blobReq = BlobRequest(content = scannedFile.base64Content)
+                                    val blobResp = service.createBlob(config.owner, config.repoName, blobReq)
+
+                                    val currentCount = uploadedCount.incrementAndGet()
+                                    _syncState.value = SyncState.UploadingBlobs(
+                                        total = total,
+                                        uploaded = currentCount,
+                                        currentFile = scannedFile.relativePath
+                                    )
+
+                                    return@async TreeEntry(
+                                        path = scannedFile.relativePath,
+                                        mode = "100644",
+                                        type = "blob",
+                                        sha = blobResp.sha
+                                    )
+                                } catch (e: Exception) {
+                                    lastError = e
+                                    if (attempt < 3) {
+                                        delay(800L * attempt)
+                                    }
+                                }
+                            }
+                            throw lastError ?: Exception("Failed to upload blob for ${scannedFile.relativePath}")
+                        }
+                    }
+                }
+
+                val entries = deferredEntries.awaitAll().toMutableList()
+
+                if (entries.isNotEmpty() || didInitialUpload) {
                     // 4. Create new tree on GitHub
                     _syncState.value = SyncState.CreatingTree
                     delay(500)
@@ -365,6 +431,27 @@ class GitSyncViewModel(private val repository: GithubSyncRepository) : ViewModel
                     errorMsg = errorMsg
                 )
             }
+        }
+    }
+
+    private fun calculateGitBlobSha(base64Content: String): String {
+        return try {
+            val bytes = android.util.Base64.decode(base64Content, android.util.Base64.DEFAULT)
+            val header = "blob ${bytes.size}\u0000".toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+            val concatenated = ByteArray(header.size + bytes.size)
+            System.arraycopy(header, 0, concatenated, 0, header.size)
+            System.arraycopy(bytes, 0, concatenated, header.size, bytes.size)
+
+            val digest = java.security.MessageDigest.getInstance("SHA-1")
+            val sha1Bytes = digest.digest(concatenated)
+
+            val sb = java.lang.StringBuilder()
+            for (b in sha1Bytes) {
+                sb.append(java.lang.String.format("%02x", b))
+            }
+            sb.toString()
+        } catch (e: Exception) {
+            ""
         }
     }
 

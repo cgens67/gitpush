@@ -151,6 +151,7 @@ fun LoadingIndicator(
 
 @Composable
 fun LinearWavyProgressIndicator(
+    progress: Float,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     trackColor: Color = MaterialTheme.colorScheme.outlineVariant,
@@ -181,31 +182,45 @@ fun LinearWavyProgressIndicator(
         val midY = size.height / 2f
         val ampPx = amplitude.toPx()
         val wavelengthPx = wavelength.toPx().coerceAtLeast(10f)
+        val activeWidth = width * progress.coerceIn(0f, 1f)
 
-        drawLine(
-            color = trackColor,
-            start = androidx.compose.ui.geometry.Offset(0f, midY),
-            end = androidx.compose.ui.geometry.Offset(width, midY),
-            strokeWidth = trackStroke.width,
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
+        // Draw the full track in trackColor
+        val trackPath = androidx.compose.ui.graphics.Path()
+        trackPath.moveTo(0f, midY + (ampPx * Math.sin(-phase.toDouble())).toFloat())
 
-        val p = androidx.compose.ui.graphics.Path()
-        p.moveTo(0f, midY + (ampPx * Math.sin(-phase.toDouble())).toFloat())
-
-        var x = 0f
-        while (x <= width) {
-            val angle = (x / wavelengthPx) * (2f * Math.PI) - phase
+        var tX = 0f
+        while (tX <= width) {
+            val angle = (tX / wavelengthPx) * (2f * Math.PI) - phase
             val y = midY + (ampPx * Math.sin(angle)).toFloat()
-            p.lineTo(x, y)
-            x += 2f
+            trackPath.lineTo(tX, y)
+            tX += 2f
         }
 
         drawPath(
-            path = p,
-            color = color,
-            style = stroke
+            path = trackPath,
+            color = trackColor,
+            style = trackStroke
         )
+
+        // Draw active path up to activeWidth in active color
+        if (activeWidth > 0f) {
+            val activePath = androidx.compose.ui.graphics.Path()
+            activePath.moveTo(0f, midY + (ampPx * Math.sin(-phase.toDouble())).toFloat())
+
+            var aX = 0f
+            while (aX <= activeWidth) {
+                val angle = (aX / wavelengthPx) * (2f * Math.PI) - phase
+                val y = midY + (ampPx * Math.sin(angle)).toFloat()
+                activePath.lineTo(aX, y)
+                aX += 2f
+            }
+
+            drawPath(
+                path = activePath,
+                color = color,
+                style = stroke
+            )
+        }
     }
 }
 
@@ -338,6 +353,7 @@ fun ProgressScreen(
 
                     // Elegant design with waving progression
                     LinearWavyProgressIndicator(
+                        progress = s.uploaded.toFloat() / s.total.coerceAtLeast(1).toFloat(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
