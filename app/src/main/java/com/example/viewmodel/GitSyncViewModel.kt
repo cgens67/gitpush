@@ -15,6 +15,7 @@ import com.example.network.TreeEntry
 import com.example.network.TreeRequest
 import com.example.network.UpdateRefRequest
 import com.example.network.CreateRefRequest
+import com.example.network.CreateOrUpdateFileRequest
 import com.example.utils.FolderScanner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -191,7 +192,54 @@ class GitSyncViewModel(private val repository: GithubSyncRepository) : ViewModel
                     null // If branch doesn't exist yet
                 }
 
-                val parentCommitSha = refResponse?.`object`?.sha
+                var parentCommitSha: String? = null
+                var didInitialUpload = false
+
+                if (refResponse != null) {
+                    parentCommitSha = refResponse.`object`.sha
+                } else {
+                    // Selected branch doesn't exist yet, or repository is empty. Let's see if any other branch exists.
+                    val existingBranches = try {
+                        service.getBranches(config.owner, config.repoName)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+
+                    if (existingBranches.isNotEmpty()) {
+                        // The repo is NOT empty! Let's base our new branch off the first existing branch of the repo.
+                        val baseBranch = existingBranches.first().name
+                        val baseRef = try {
+                            service.getRef(config.owner, config.repoName, baseBranch)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        parentCommitSha = baseRef?.`object`?.sha
+                    } else {
+                        // The repository is COMPLETELY empty!
+                        // Let's perform an initial file creation (using the first file in our scanned files list) to initialize the repository.
+                        val firstFile = files.first()
+                        _syncState.value = SyncState.UploadingBlobs(
+                            total = files.size,
+                            uploaded = 1,
+                            currentFile = firstFile.relativePath
+                        )
+                        val uploadMsg = "Initial commit: Add ${firstFile.relativePath}"
+                        val uploadReq = CreateOrUpdateFileRequest(
+                            message = uploadMsg,
+                            content = firstFile.base64Content,
+                            branch = config.selectedBranch
+                        )
+                        val initResponse = service.createOrUpdateFile(
+                            owner = config.owner,
+                            repo = config.repoName,
+                            path = firstFile.relativePath,
+                            body = uploadReq
+                        )
+                        parentCommitSha = initResponse.commit?.sha
+                        didInitialUpload = true
+                    }
+                }
+
                 val baseTreeSha = if (parentCommitSha != null) {
                     _syncState.value = SyncState.FetchingCommitDetail
                     val commitDetail = service.getCommitDetails(config.owner, config.repoName, parentCommitSha)
@@ -200,83 +248,114 @@ class GitSyncViewModel(private val repository: GithubSyncRepository) : ViewModel
                     null
                 }
 
-                // 3. Create blob on GitHub for each scanned file
+                // 3. Create blob on GitHub for each remaining scanned file
                 val total = files.size
                 val entries = mutableListOf<TreeEntry>()
+                val startIndex = if (didInitialUpload) 1 else 0
 
-                files.forEachIndexed { index, scannedFile ->
-                    _syncState.value = SyncState.UploadingBlobs(
-                        total = total,
-                        uploaded = index + 1,
-                        currentFile = scannedFile.relativePath
-                    )
+                if (startIndex < total) {
+                    for (index in startIndex until total) {
+                        val scannedFile = files[index]
+                        _syncState.value = SyncState.UploadingBlobs(
+                            total = total,
+                            uploaded = index + 1,
+                            currentFile = scannedFile.relativePath
+                        )
 
-                    val blobReq = BlobRequest(content = scannedFile.base64Content)
-                    val blobResp = service.createBlob(config.owner, config.repoName, blobReq)
+                        val blobReq = BlobRequest(content = scannedFile.base64Content)
+                        val blobResp = service.createBlob(config.owner, config.repoName, blobReq)
 
-                    entries.add(
-                        TreeEntry(
-                            path = scannedFile.relativePath,
-                            mode = "100644",
-                            type = "blob",
-                            sha = blobResp.sha
+                        entries.add(
+                            TreeEntry(
+                                path = scannedFile.relativePath,
+                                mode = "100644",
+                                type = "blob",
+                                sha = blobResp.sha
+                            )
+                        )
+                    }
+
+                    // 4. Create new tree on GitHub
+                    _syncState.value = SyncState.CreatingTree
+                    delay(500)
+                    val treeReq = TreeRequest(base_tree = baseTreeSha, tree = entries)
+                    val treeResp = service.createTree(config.owner, config.repoName, treeReq)
+
+                    // 5. Create new commit linking tree and parent commit
+                    _syncState.value = SyncState.CreatingCommit
+                    delay(500)
+                    val parents = if (parentCommitSha != null) listOf(parentCommitSha) else emptyList()
+                    val commitReq = CommitRequest(message = message, tree = treeResp.sha, parents = parents)
+                    val commitResp = service.createCommit(config.owner, config.repoName, commitReq)
+
+                    // 6. Push reference branch update
+                    _syncState.value = SyncState.UpdatingRef
+                    delay(500)
+                    val finalCommitSha = commitResp.sha
+                    if (refResponse != null) {
+                        service.updateRef(
+                            owner = config.owner,
+                            repo = config.repoName,
+                            branch = config.selectedBranch,
+                            body = UpdateRefRequest(sha = finalCommitSha, force = true)
+                        )
+                    } else {
+                        // Dynamically create the branch reference
+                        service.createRef(
+                            owner = config.owner,
+                            repo = config.repoName,
+                            body = CreateRefRequest(
+                                ref = "refs/heads/${config.selectedBranch}",
+                                sha = finalCommitSha
+                            )
+                        )
+                    }
+
+                    // Success! Append to log and update UI
+                    repository.addCommitLog(
+                        CommitLog(
+                            commitMsg = message,
+                            branchName = config.selectedBranch,
+                            commitSha = finalCommitSha
                         )
                     )
-                }
 
-                // 4. Create new tree on GitHub
-                _syncState.value = SyncState.CreatingTree
-                delay(500)
-                val treeReq = TreeRequest(base_tree = baseTreeSha, tree = entries)
-                val treeResp = service.createTree(config.owner, config.repoName, treeReq)
-
-                // 5. Create new commit linking tree and parent commit
-                _syncState.value = SyncState.CreatingCommit
-                delay(500)
-                val parents = if (parentCommitSha != null) listOf(parentCommitSha) else emptyList()
-                val commitReq = CommitRequest(message = message, tree = treeResp.sha, parents = parents)
-                val commitResp = service.createCommit(config.owner, config.repoName, commitReq)
-
-                // 6. Push reference branch update
-                _syncState.value = SyncState.UpdatingRef
-                delay(500)
-                if (parentCommitSha != null) {
-                    service.updateRef(
-                        owner = config.owner,
-                        repo = config.repoName,
-                        branch = config.selectedBranch,
-                        body = UpdateRefRequest(sha = commitResp.sha, force = true)
+                    _syncState.value = SyncState.Success(
+                        commitSha = finalCommitSha,
+                        summary = "Successfully pushed $total file(s) to branch '${config.selectedBranch}'!"
                     )
                 } else {
-                    // Fallback: This is a brand-new or empty repository. Dynamically create the branch reference!
-                    service.createRef(
-                        owner = config.owner,
-                        repo = config.repoName,
-                        body = CreateRefRequest(
-                            ref = "refs/heads/${config.selectedBranch}",
-                            sha = commitResp.sha
+                    // Success (Only 1 file total, and uploaded during init)
+                    val finalCommitSha = parentCommitSha ?: ""
+                    repository.addCommitLog(
+                        CommitLog(
+                            commitMsg = message,
+                            branchName = config.selectedBranch,
+                            commitSha = finalCommitSha
                         )
                     )
-                }
 
-                // Success! Append to log and update UI
-                repository.addCommitLog(
-                    CommitLog(
-                        commitMsg = message,
-                        branchName = config.selectedBranch,
-                        commitSha = commitResp.sha
+                    _syncState.value = SyncState.Success(
+                        commitSha = finalCommitSha,
+                        summary = "Successfully pushed $total file(s) to branch '${config.selectedBranch}'!"
                     )
-                )
-
-                _syncState.value = SyncState.Success(
-                    commitSha = commitResp.sha,
-                    summary = "Successfully pushed $total file(s) to branch '${config.selectedBranch}'!"
-                )
+                }
 
             } catch (e: Exception) {
                 e.printStackTrace()
+                var errorMsg = e.localizedMessage ?: e.message ?: "An unexpected error occurred during GitHub push."
+                if (e is retrofit2.HttpException) {
+                    try {
+                        val errorBody = e.response()?.errorBody()?.string()
+                        if (!errorBody.isNullOrBlank()) {
+                            errorMsg += " (Details: $errorBody)"
+                        }
+                    } catch (err: Exception) {
+                        // Ignore body parsing errors
+                    }
+                }
                 _syncState.value = SyncState.Error(
-                    errorMsg = e.localizedMessage ?: e.message ?: "An unexpected error occurred during GitHub push."
+                    errorMsg = errorMsg
                 )
             }
         }

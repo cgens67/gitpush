@@ -12,6 +12,7 @@ import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import java.util.concurrent.TimeUnit
 
@@ -99,6 +100,27 @@ data class CreateRefRequest(
     val sha: String
 )
 
+data class CreateOrUpdateFileRequest(
+    val message: String,
+    val content: String,
+    val branch: String? = null
+)
+
+data class CreateOrUpdateFileResponse(
+    val content: ContentInfo? = null,
+    val commit: CommitInfo? = null
+)
+
+data class ContentInfo(
+    val name: String,
+    val path: String,
+    val sha: String
+)
+
+data class CommitInfo(
+    val sha: String
+)
+
 data class BranchResponseItem(
     val name: String
 )
@@ -153,6 +175,14 @@ interface GithubApiService {
         @Path("repo") repo: String,
         @Body body: CreateRefRequest
     ): RefResponse
+
+    @PUT("repos/{owner}/{repo}/contents/{path}")
+    suspend fun createOrUpdateFile(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("path") path: String,
+        @Body body: CreateOrUpdateFileRequest
+    ): CreateOrUpdateFileResponse
 
     @GET("repos/{owner}/{repo}/branches")
     suspend fun getBranches(
